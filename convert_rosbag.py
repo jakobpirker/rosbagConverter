@@ -2,6 +2,7 @@ import yaml
 import argparse
 import rosbag
 from rospy_message_converter import message_converter
+import numpy as np
 
 YAML_DESC = "data_description"
 YAML_DATATYPE = "datatype"
@@ -30,8 +31,7 @@ class RosbagStructureParser:
 
   YAML_DATAFIELD_DESC = {YAML_DESC:{
     YAML_IDENT: "Identifier according to section '{0}'".format(YAML_IDENT),
-    YAML_DATATYPE: ("Identifier for final storing, for {0} leave it as it is,".format(IDENT_CONFIG) +  
-                    "for {0} use !NUMPY STRUCTURED ARRAY! datatype!".format(IDENT_DATA)),
+    YAML_DATATYPE: "Identifier for !NUMPY STRUCTURED ARRAY! datatype!",
     YAML_ALIAS: "Name that is used in the structured array for storing"
     }}
     
@@ -109,34 +109,30 @@ class RosbagStructureParser:
 class Rosbag2DataConverter:
 
   def __init__(self, bag_file, yaml_config):
-    self.bag_file_ = bag_file
+    
+    self.bag_ = rosbag.Bag(bag_file)
     
     # parse config-yaml
     with open(yaml_config, "r") as f:
       self.structure_ = yaml.load(f)
-      
-    self.identifier_ = self.structure_[YAML_IDENT]
-    self.datafields_ = sorted(self.structure_[YAML_DESC].keys())
     
-    # delete description entries for later parsing
+    # extract and then remove description elements 
+    self.identifier_ = self.structure_[YAML_IDENT]
+    self.datafields_ = sorted(self.structure_[YAML_DESC].keys())    
     del self.structure_[YAML_IDENT]
     del self.structure_[YAML_DESC]
     
     self.data_paths_ = {}    
-
-    # each topic contains a list of paths for the corresponding datafield
-    # each list element contains a dictionary defining the field-properties
     self.getDictPaths_(self.structure_, [])
+    config_dt, data_dt = self.createDataStructureDef_(self.bag_, self.data_paths_)
     
     # print(yaml.dump(self.data_paths_))
-    
-    # use numpy structured array for storing!
-    # TODO: create data-structure
-        
-    # read and save the data from bagfile
-    bag = rosbag.Bag(self.bag_file_)
-    for topic in self.data_paths_.keys():
-      for top, msg, t in bag.read_messages(topics=[topic]):
+    print(yaml.dump(config_dt))
+    print(yaml.dump(data_dt))
+     
+    # save the data from bagfile to 2D array structure
+    for topic in self.data_paths_:
+      for top, msg, t in self.bag_.read_messages(topics=[topic]):
         for path in self.data_paths_[topic]:
           
           # last element contains data description
@@ -162,7 +158,41 @@ class Rosbag2DataConverter:
             print("A wild ERROR appeared! (1) FIGHT, (2) PROG, (3) ITEM, (4) RUN")
         # temp
         break
+        
+    self.bag_.close()
 
+  # create data-structure-Definition
+  def createDataStructureDef_(self, bag, data_path):
+    config_dt = {}
+    data_dt = {}
+    
+    for topic in self.data_paths_:
+      msg_count = bag.get_message_count(topic)
+      for path in self.data_paths_[topic]:
+        
+        # last element contains data description
+        dict_path = path[:-1]
+        datafields = path[-1]
+        
+        if datafields[YAML_IDENT] == IDENT_CONFIG:
+          if topic not in config_dt:
+            config_dt[topic] = []
+          
+          config_dt[topic].append((datafields[YAML_ALIAS], datafields[YAML_DATATYPE]))
+        elif datafields[YAML_IDENT] == IDENT_DATA:
+          if topic not in data_dt:
+            data_dt[topic] = []
+            
+          #TODO: treat arrays explicitly
+          data_dt[topic].append((datafields[YAML_ALIAS], datafields[YAML_DATATYPE], "(" + str(msg_count) + ",)"))
+        else:
+          print("ERROR: Wrong identifier for: " + self.path2Str_([topic] + dict_path))
+          
+    return (config_dt, data_dt)
+    
+
+  # each topic contains a list of paths for the corresponding datafield
+  # each list element contains a dictionary defining the field-properties
   def getDictPaths_(self, dictionary, path):
     for key in dictionary:
       
@@ -217,5 +247,4 @@ if args.info or args.config:
   
 if args.output:
   r2d = Rosbag2DataConverter(args.file, rsp.getYamlFile())
-
 
