@@ -7,6 +7,7 @@ import numpy as np
 YAML_DESC = "data_description"
 YAML_DATATYPE = "datatype"
 YAML_ALIAS = "name"
+YAML_LENGTH = "length"
 
 YAML_IDENT = "identifier"
 IDENT_CONFIG = "c"
@@ -32,7 +33,8 @@ class RosbagStructureParser:
   YAML_DATAFIELD_DESC = {YAML_DESC:{
     YAML_IDENT: "Identifier according to section '{0}'".format(YAML_IDENT),
     YAML_DATATYPE: "Identifier for !NUMPY STRUCTURED ARRAY! datatype!",
-    YAML_ALIAS: "Name that is used in the structured array for storing"
+    YAML_ALIAS: "Name that is used in the structured array for storing",
+    YAML_LENGTH: "Optional, lenth for array elements"
     }}
     
   YAML_SEPERATOR = (
@@ -64,7 +66,7 @@ class RosbagStructureParser:
       
       for top, msg, t in bag.read_messages(topics=[topic]):
         dictionaries[topic] = message_converter.convert_ros_message_to_dictionary(msg)        
-        self.unpackDict_(dictionaries[topic], 1)
+        self.addDatafieldSpecifier_(dictionaries[topic])
         # get datatypes from first message
         break
 
@@ -83,23 +85,26 @@ class RosbagStructureParser:
   def getYamlFile(self):
     return self.yaml_file_
   
-  def unpackDict_(self, dictionary, depth):
+  # Adds identifier entries to each leave of the dictionary-tree
+  def addDatafieldSpecifier_(self, dictionary):
     for key in dictionary:
       
       # nested dictionary
       if isinstance(dictionary[key], dict):
-        self.unpackDict_(dictionary[key], depth + 1)
+        self.addDatafieldSpecifier_(dictionary[key])
       
       # create description for each leave according to its type 
       else:
         new_content = {YAML_IDENT: None, YAML_ALIAS: str(key)}
         
+        # nested array
         if isinstance(dictionary[key], list):
-          # TODO: handle correctly
+          # empty lists are skipped
           if len(dictionary[key]) > 1:
-            new_content[YAML_DATATYPE] = type(dictionary[key][0]).__name__ + "[" + str(len(dictionary[key])) + "]"
+            new_content[YAML_DATATYPE] = type(dictionary[key][0]).__name__
+            new_content[YAML_LENGTH] = len(dictionary[key])
           else:
-            new_content[YAML_DATATYPE] = "empty list..."
+            print("WARNING: Skipped empty list element: " + str(key))
         else:
           new_content[YAML_DATATYPE] = type(dictionary[key]).__name__ 
           
@@ -118,11 +123,14 @@ class Rosbag2DataConverter:
     
     # extract and then remove description elements 
     self.identifier_ = self.structure_[YAML_IDENT]
-    self.datafields_ = sorted(self.structure_[YAML_DESC].keys())    
+    # datafields for non-array type
+    self.datafields_ = sorted(self.structure_[YAML_DESC].keys().remove(YAML_LENGTH))
+    # datafields for array type
+    self.datafields_list_ = sorted(self.structure_[YAML_DESC].keys())  
     del self.structure_[YAML_IDENT]
     del self.structure_[YAML_DESC]
     
-    self.data_paths_ = {}    
+    self.data_paths_ = {}
     self.getDictPaths_(self.structure_, [])
     config_dt, data_dt = self.createDataStructureDef_(self.bag_, self.data_paths_)
     
@@ -159,37 +167,7 @@ class Rosbag2DataConverter:
         # temp
         break
         
-    self.bag_.close()
-
-  # create data-structure-Definition
-  def createDataStructureDef_(self, bag, data_path):
-    config_dt = {}
-    data_dt = {}
-    
-    for topic in self.data_paths_:
-      msg_count = bag.get_message_count(topic)
-      for path in self.data_paths_[topic]:
-        
-        # last element contains data description
-        dict_path = path[:-1]
-        datafields = path[-1]
-        
-        if datafields[YAML_IDENT] == IDENT_CONFIG:
-          if topic not in config_dt:
-            config_dt[topic] = []
-          
-          config_dt[topic].append((datafields[YAML_ALIAS], datafields[YAML_DATATYPE]))
-        elif datafields[YAML_IDENT] == IDENT_DATA:
-          if topic not in data_dt:
-            data_dt[topic] = []
-            
-          #TODO: treat arrays explicitly
-          data_dt[topic].append((datafields[YAML_ALIAS], datafields[YAML_DATATYPE], "(" + str(msg_count) + ",)"))
-        else:
-          print("ERROR: Wrong identifier for: " + self.path2Str_([topic] + dict_path))
-          
-    return (config_dt, data_dt)
-    
+    self.bag_.close()    
 
   # each topic contains a list of paths for the corresponding datafield
   # each list element contains a dictionary defining the field-properties
@@ -212,12 +190,43 @@ class Rosbag2DataConverter:
           self.getDictPaths_(dictionary[key], path + [key])
       # Potential error
       elif key in self.datafields_:
-        print("WARNING: No full set of data-field properties for: " + self.path2Str_(path + [key]))        
+        print("WARNING: No full set or extra data-field properties for: " + self.path2Str_(path + [key]))        
       
       # invalid identifier
       else:
         print("ERROR: Invalid identifier used for: " + self.path2Str_(path + [key]))
+
+  # create data-structure-Definition
+  def createDataStructureDef_(self, bag, data_path):
+    config_dt = {}
+    data_dt = {}
     
+    for topic in self.data_paths_:
+      msg_count = self.bag_.get_message_count(topic)
+      for path in self.data_paths_[topic]:
+        
+        # last element contains data description
+        dict_path = path[:-1]
+        datafields = path[-1]
+        
+        if datafields[YAML_IDENT] == IDENT_CONFIG:
+          if topic not in config_dt:
+            config_dt[topic] = []
+          
+          config_dt[topic].append((datafields[YAML_ALIAS], datafields[YAML_DATATYPE]))
+        elif datafields[YAML_IDENT] == IDENT_DATA:
+          if topic not in data_dt:
+            data_dt[topic] = []
+            
+          #TODO: treat arrays explicitly
+          data_dt[topic].append((datafields[YAML_ALIAS], datafields[YAML_DATATYPE], "(" + str(msg_count) + ",)"))
+        else:
+          print("ERROR: Wrong identifier for: " + self.path2Str_([topic] + dict_path))
+          
+    return (config_dt, data_dt)
+  
+  def 
+   
   def path2Str_(self, path):
     ret = ""
     for element in path:
