@@ -33,7 +33,7 @@ class RosbagStructureParser:
   YAML_DATAFIELD_DESC = {YAML_DESC:{
     YAML_IDENT: "Identifier according to section '{0}'".format(YAML_IDENT),
     YAML_DATATYPE: "Identifier for !NUMPY STRUCTURED ARRAY! datatype!",
-    YAML_ALIAS: "Name that is used in the structured array for storing",
+    YAML_ALIAS: "Unique (for this topic) Name that is used in the structured array for storing",
     YAML_LENGTH: "Optional, lenth for array elements"
     }}
     
@@ -66,7 +66,7 @@ class RosbagStructureParser:
       
       for top, msg, t in bag.read_messages(topics=[topic]):
         dictionaries[topic] = message_converter.convert_ros_message_to_dictionary(msg)        
-        self.addDatafieldSpecifier_(dictionaries[topic])
+        self.addDatafieldSpecifiers_(dictionaries[topic])
         # get datatypes from first message
         break
 
@@ -86,12 +86,12 @@ class RosbagStructureParser:
     return self.yaml_file_
   
   # Adds identifier entries to each leave of the dictionary-tree
-  def addDatafieldSpecifier_(self, dictionary):
+  def addDatafieldSpecifiers_(self, dictionary):
     for key in dictionary:
       
       # nested dictionary
       if isinstance(dictionary[key], dict):
-        self.addDatafieldSpecifier_(dictionary[key])
+        self.addDatafieldSpecifiers_(dictionary[key])
       
       # create description for each leave according to its type 
       else:
@@ -124,9 +124,11 @@ class Rosbag2DataConverter:
     # extract and then remove description elements 
     self.identifier_ = self.structure_[YAML_IDENT]
     # datafields for non-array type
-    self.datafields_ = sorted(self.structure_[YAML_DESC].keys().remove(YAML_LENGTH))
-    # datafields for array type
-    self.datafields_list_ = sorted(self.structure_[YAML_DESC].keys())  
+    self.datafields_list_ = sorted(self.structure_[YAML_DESC].keys())
+    # datafields for non-array type, copy to prevent changes in both lists
+    self.datafields_ = self.datafields_list_[:]
+    self.datafields_.remove(YAML_LENGTH)
+      
     del self.structure_[YAML_IDENT]
     del self.structure_[YAML_DESC]
     
@@ -134,7 +136,7 @@ class Rosbag2DataConverter:
     self.getDictPaths_(self.structure_, [])
     config_dt, data_dt = self.createDataStructureDef_(self.bag_, self.data_paths_)
     
-    # print(yaml.dump(self.data_paths_))
+    print(yaml.dump(self.data_paths_))
     print(yaml.dump(config_dt))
     print(yaml.dump(data_dt))
      
@@ -144,7 +146,7 @@ class Rosbag2DataConverter:
         for path in self.data_paths_[topic]:
           
           # last element contains data description
-          dict_path = path[:-1]
+          dict_path = path[:-2]
           datafields = path[-1]
           
           # get nested element according to data path in path dict
@@ -163,7 +165,8 @@ class Rosbag2DataConverter:
           
           else:
             # shouldn't happen...
-            print("A wild ERROR appeared! (1) FIGHT, (2) PROG, (3) ITEM, (4) RUN")
+            print("A wild ERROR appeared! for: " + self.path2Str_([topic] + path))
+            print("(1) FIGHT, (2) PROG, (3) ITEM, (4) RUN")
         # temp
         break
         
@@ -178,7 +181,7 @@ class Rosbag2DataConverter:
       if isinstance(dictionary[key], dict):
               
         # dictionary contains a data-field description
-        if sorted(dictionary[key].keys()) == self.datafields_:
+        if sorted(dictionary[key].keys()) == self.datafields_ or sorted(dictionary[key].keys()) == self.datafields_list_:
         
           # key for current topic not yet in data_paths_
           if path[0] not in self.data_paths_:
@@ -212,20 +215,29 @@ class Rosbag2DataConverter:
         if datafields[YAML_IDENT] == IDENT_CONFIG:
           if topic not in config_dt:
             config_dt[topic] = []
+            
+          # datafield is array  
+          if YAML_LENGTH in datafields:
+            array_type = "(1, {0})".format(datafields[YAML_LENGTH])
+            config_dt[topic].append((datafields[YAML_ALIAS], datafields[YAML_DATATYPE], array_type))
+          else:
+            config_dt[topic].append((datafields[YAML_ALIAS], datafields[YAML_DATATYPE]))          
           
-          config_dt[topic].append((datafields[YAML_ALIAS], datafields[YAML_DATATYPE]))
         elif datafields[YAML_IDENT] == IDENT_DATA:
           if topic not in data_dt:
             data_dt[topic] = []
-            
-          #TODO: treat arrays explicitly
-          data_dt[topic].append((datafields[YAML_ALIAS], datafields[YAML_DATATYPE], "(" + str(msg_count) + ",)"))
+          
+          # datafield is array  
+          if YAML_LENGTH in datafields:
+            array_type = "({0}, {1})".format(msg_count, datafields[YAML_LENGTH])
+          else:
+            array_type = "({0}, )".format(str(msg_count))
+
+          data_dt[topic].append((datafields[YAML_ALIAS], datafields[YAML_DATATYPE], array_type))
         else:
           print("ERROR: Wrong identifier for: " + self.path2Str_([topic] + dict_path))
           
     return (config_dt, data_dt)
-  
-  def 
    
   def path2Str_(self, path):
     ret = ""
