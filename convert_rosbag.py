@@ -116,6 +116,8 @@ class Rosbag2DataConverter:
 
   def __init__(self, bag_file, yaml_config):
     
+    self.YAML_PATH = 'path'
+    
     self.bag_ = rosbag.Bag(bag_file)
     
     # parse config-yaml
@@ -124,21 +126,22 @@ class Rosbag2DataConverter:
     
     # extract and then remove description elements 
     self.identifier_ = self.structure_[YAML_IDENT]
-    # datafields for non-array type
     self.datafields_ = sorted(self.structure_[YAML_DESC].keys())
       
     del self.structure_[YAML_IDENT]
     del self.structure_[YAML_DESC]
     
-    leafs = {}
-    self.getLeafs(self.structure_, leafs)
-    print(leafs)
+    self.data_entries_ = {}
     
-    self.data_paths_ = {}
-    self.getDictPaths_(self.structure_, [])
-    config_dt, data_dt = self.createDataStructureDef_(self.bag_, self.data_paths_)
+    for topic in self.structure_:
+      self.data_entries_[topic] = {}
+      self.getDictPaths_(self.structure_[topic], [], self.data_entries_[topic])
+      
+      
     
-    print(yaml.dump(self.data_paths_))
+    config_dt, data_dt = self.createDataStructureDef_(self.bag_, self.data_paths_)      
+    
+    
     print(yaml.dump(config_dt))
     print(yaml.dump(data_dt))
      
@@ -172,23 +175,11 @@ class Rosbag2DataConverter:
         # temp
         break
         
-    self.bag_.close()    
-
-  def getLeafs(self, dictionary, leafs):
-    for key in dictionary:
-      
-      # nested dictionary
-      if isinstance(dictionary[key], dict):
-        self.getLeafs(dictionary[key], leafs)
-      
-      # create description for each leaf according to its type 
-      else:
-        leafs[key] = dictionary[key]
-  
+    self.bag_.close()  
 
   # each topic contains a list of paths for the corresponding datafield
   # each list element contains a dictionary defining the field-properties
-  def getDictPaths_(self, dictionary, path):
+  def getDictPaths_(self, dictionary, path, entries):
     for key in dictionary:
       
       # nested dictionary
@@ -196,15 +187,21 @@ class Rosbag2DataConverter:
               
         # dictionary contains a data-field description
         if sorted(dictionary[key].keys()) == self.datafields_:
-        
-          # key for current topic not yet in data_paths_
-          if path[0] not in self.data_paths_:
-            self.data_paths_[path[0]] = []
-           
-          self.data_paths_[path[0]].append(path[1:] + [key] + [dictionary[key]])
           
+          # copy and then adapt current data-description for later processing
+          new_dict = dictionary[key].copy()
+          
+          # name is unique for later column reference
+          if new_dict[YAML_ALIAS] not in entries:
+            name = new_dict[YAML_ALIAS]
+            del new_dict[YAML_ALIAS]
+            new_dict[self.YAML_PATH] = path + [key]
+            entries[name] = new_dict
+          else:
+            print("ERROR: Multiple entries for datafield: " + str(dictionary[key][YAML_ALIAS]))
         else:
-          self.getDictPaths_(dictionary[key], path + [key])
+          self.getDictPaths_(dictionary[key], path + [key], entries)
+      
       # Potential error
       elif key in self.datafields_:
         print("WARNING: No full set or extra data-field properties for: " + self.path2Str_(path + [key]))        
