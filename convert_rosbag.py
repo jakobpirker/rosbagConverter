@@ -131,20 +131,30 @@ class Rosbag2DataConverter:
     del self.structure_[YAML_IDENT]
     del self.structure_[YAML_DESC]
     
-    self.data_entries_ = {}
+    # for each topic:
+    self.field_entries_ = {} # data entries
+    # storage structure for configuration and data
+    self.dt_ = {IDENT_CONFIG:{}, IDENT_DATA:{}}
     
     for topic in self.structure_:
-      self.data_entries_[topic] = {}
-      self.getDictPaths_(self.structure_[topic], [], self.data_entries_[topic])
+      field_entry = {}
+      self.getDictPaths_(self.structure_[topic], [], field_entry)
+      self.field_entries_[topic] = field_entry
       
-      
+      # create 
+      for field in field_entry:        
+        # point reference pointer to the right list -> operations are the same 
+        cur_dt = self.dt_[field_entry[field][YAML_IDENT]] 
+        # no according entry for this list yet          
+        if topic not in cur_dt:
+          cur_dt[topic] = []
+          
+        array_type = "({0}, {1})".format(self.bag_.get_message_count(topic), field_entry[field][YAML_LENGTH])
+        cur_dt[topic].append((field, field_entry[field][YAML_DATATYPE], array_type))
     
-    config_dt, data_dt = self.createDataStructureDef_(self.bag_, self.data_paths_)      
+    print(yaml.dump(self.dt_))
+    return
     
-    
-    print(yaml.dump(config_dt))
-    print(yaml.dump(data_dt))
-     
     # save the data from bagfile to 2D array structure
     for topic in self.data_paths_:
       for top, msg, t in self.bag_.read_messages(topics=[topic]):
@@ -209,46 +219,6 @@ class Rosbag2DataConverter:
       # invalid identifier
       else:
         print("ERROR: Invalid identifier used for: " + self.path2Str_(path + [key]))
-
-  # create data-structure-Definition
-  def createDataStructureDef_(self, bag, data_path):
-    config_dt = {}
-    data_dt = {}
-    
-    for topic in self.data_paths_:
-      msg_count = self.bag_.get_message_count(topic)
-      for path in self.data_paths_[topic]:
-        
-        # last element contains data description
-        dict_path = path[:-1]
-        datafields = path[-1]
-        
-        if datafields[YAML_IDENT] == IDENT_CONFIG:
-          if topic not in config_dt:
-            config_dt[topic] = []
-            
-          # datafield is array  
-          if YAML_LENGTH in datafields:
-            array_type = "(1, {0})".format(datafields[YAML_LENGTH])
-            config_dt[topic].append((datafields[YAML_ALIAS], datafields[YAML_DATATYPE], array_type))
-          else:
-            config_dt[topic].append((datafields[YAML_ALIAS], datafields[YAML_DATATYPE]))          
-          
-        elif datafields[YAML_IDENT] == IDENT_DATA:
-          if topic not in data_dt:
-            data_dt[topic] = []
-          
-          # datafield is array  
-          if YAML_LENGTH in datafields:
-            array_type = "({0}, {1})".format(msg_count, datafields[YAML_LENGTH])
-          else:
-            array_type = "({0}, )".format(str(msg_count))
-
-          data_dt[topic].append((datafields[YAML_ALIAS], datafields[YAML_DATATYPE], array_type))
-        else:
-          print("ERROR: Wrong identifier for: " + self.path2Str_([topic] + dict_path))
-          
-    return (config_dt, data_dt)
    
   def path2Str_(self, path):
     ret = ""
