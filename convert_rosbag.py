@@ -152,7 +152,7 @@ class Rosbag2DataConverter:
     
     print(yaml.dump(self.field_entries_))
     print(yaml.dump(self.dt_))
-    return
+
     # TODO: create storage structure
     
     # save the data from bagfile to 2D array structure
@@ -160,27 +160,25 @@ class Rosbag2DataConverter:
       for top, msg, t in self.bag_.read_messages(topics=[topic]):
         for name in self.field_entries_[topic]:
           
-          # last element contains data description
-          dict_path = path[:-2]
-          datafields = path[-1]
+          cur_field = self.field_entries_[topic][name]
           
           # get nested element according to data path in path dict
           element = message_converter.convert_ros_message_to_dictionary(msg)
-          for nest in dict_path:
+          for nest in cur_field[self.YAML_PATH]:
             element = element[nest]
           
           # configuration datafield
-          if datafields[YAML_IDENT] == IDENT_CONFIG:
+          if cur_field[YAML_IDENT] == IDENT_CONFIG:
             # store once, and check if it stays the same
             pass
           
-          elif datafields[YAML_IDENT] == IDENT_DATA:
+          elif cur_field[YAML_IDENT] == IDENT_DATA:
             # store for each iteration
             pass
           
           else:
             # shouldn't happen...
-            print("A wild ERROR appeared! for: " + self.path2Str_([topic] + path))
+            print("A wild ERROR appeared! for: " + self.path2Str_([topic] + cur_field[self.YAML_PATH]))
             print("(1) FIGHT, (2) PROG, (3) ITEM, (4) RUN")
         # temp
         break
