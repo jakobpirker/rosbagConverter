@@ -69,7 +69,7 @@ class RosbagStructureParser:
         self.addDatafieldSpecifiers_(dictionaries[topic])
         # get datatypes from first message
         break
-
+    
     bag.close()
     
     # print enhanced structure to yaml-config file 
@@ -81,11 +81,8 @@ class RosbagStructureParser:
         f.write(RosbagStructureParser.YAML_SEPERATOR)
         f.write(yaml.dump(dictionaries))
         print("\nThe following Yaml-template was created: " + self.yaml_file_)
-    
-  def getYamlFile(self):
-    return self.yaml_file_
-  
-  # Adds identifier entries to each leave of the dictionary-tree
+
+  # Adds identifier entries to each leaf of the dictionary-tree
   def addDatafieldSpecifiers_(self, dictionary):
     for key in dictionary:
       
@@ -93,7 +90,7 @@ class RosbagStructureParser:
       if isinstance(dictionary[key], dict):
         self.addDatafieldSpecifiers_(dictionary[key])
       
-      # create description for each leave according to its type 
+      # create description for each leaf according to its type 
       else:
         new_content = {YAML_IDENT: None, YAML_ALIAS: str(key)}
         
@@ -107,8 +104,12 @@ class RosbagStructureParser:
             print("WARNING: Skipped empty list element: " + str(key))
         else:
           new_content[YAML_DATATYPE] = type(dictionary[key]).__name__ 
+          new_content[YAML_LENGTH] = 1
           
         dictionary[key] = new_content
+        
+  def getYamlFile(self):
+    return self.yaml_file_
 
 #----------------------------------------------------------------------------------
 class Rosbag2DataConverter:
@@ -124,13 +125,14 @@ class Rosbag2DataConverter:
     # extract and then remove description elements 
     self.identifier_ = self.structure_[YAML_IDENT]
     # datafields for non-array type
-    self.datafields_list_ = sorted(self.structure_[YAML_DESC].keys())
-    # datafields for non-array type, copy to prevent changes in both lists
-    self.datafields_ = self.datafields_list_[:]
-    self.datafields_.remove(YAML_LENGTH)
+    self.datafields_ = sorted(self.structure_[YAML_DESC].keys())
       
     del self.structure_[YAML_IDENT]
     del self.structure_[YAML_DESC]
+    
+    leafs = {}
+    self.getLeafs(self.structure_, leafs)
+    print(leafs)
     
     self.data_paths_ = {}
     self.getDictPaths_(self.structure_, [])
@@ -172,6 +174,18 @@ class Rosbag2DataConverter:
         
     self.bag_.close()    
 
+  def getLeafs(self, dictionary, leafs):
+    for key in dictionary:
+      
+      # nested dictionary
+      if isinstance(dictionary[key], dict):
+        self.getLeafs(dictionary[key], leafs)
+      
+      # create description for each leaf according to its type 
+      else:
+        leafs[key] = dictionary[key]
+  
+
   # each topic contains a list of paths for the corresponding datafield
   # each list element contains a dictionary defining the field-properties
   def getDictPaths_(self, dictionary, path):
@@ -181,7 +195,7 @@ class Rosbag2DataConverter:
       if isinstance(dictionary[key], dict):
               
         # dictionary contains a data-field description
-        if sorted(dictionary[key].keys()) == self.datafields_ or sorted(dictionary[key].keys()) == self.datafields_list_:
+        if sorted(dictionary[key].keys()) == self.datafields_:
         
           # key for current topic not yet in data_paths_
           if path[0] not in self.data_paths_:
