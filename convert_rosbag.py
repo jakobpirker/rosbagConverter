@@ -116,8 +116,7 @@ class Rosbag2DataConverter:
 
   def __init__(self, bag_file, yaml_config):
     
-    self.YAML_PATH = 'path'
-    
+    self.YAML_PATH = 'path'    
     self.bag_ = rosbag.Bag(bag_file)
     
     # parse config-yaml
@@ -137,28 +136,29 @@ class Rosbag2DataConverter:
     self.dt_ = {IDENT_CONFIG:{}, IDENT_DATA:{}}
     
     for topic in self.structure_:
-      field_entry = {}
-      self.getDictPaths_(self.structure_[topic], [], field_entry)
+      field_entry = self.getDictPaths_(self.structure_[topic], [], {})
       self.field_entries_[topic] = field_entry
       
-      # create 
-      for field in field_entry:        
+      # create storage structure definition
+      for name in field_entry:        
         # point reference pointer to the right list -> operations are the same 
-        cur_dt = self.dt_[field_entry[field][YAML_IDENT]] 
+        cur_dt = self.dt_[field_entry[name][YAML_IDENT]] 
         # no according entry for this list yet          
         if topic not in cur_dt:
           cur_dt[topic] = []
           
-        array_type = "({0}, {1})".format(self.bag_.get_message_count(topic), field_entry[field][YAML_LENGTH])
-        cur_dt[topic].append((field, field_entry[field][YAML_DATATYPE], array_type))
+        array_type = "({0}, {1})".format(self.bag_.get_message_count(topic), field_entry[name][YAML_LENGTH])
+        cur_dt[topic].append((name, field_entry[name][YAML_DATATYPE], array_type))
     
+    print(yaml.dump(self.field_entries_))
     print(yaml.dump(self.dt_))
     return
+    # TODO: create storage structure
     
     # save the data from bagfile to 2D array structure
-    for topic in self.data_paths_:
+    for topic in self.field_entries_:
       for top, msg, t in self.bag_.read_messages(topics=[topic]):
-        for path in self.data_paths_[topic]:
+        for name in self.field_entries_[topic]:
           
           # last element contains data description
           dict_path = path[:-2]
@@ -219,6 +219,8 @@ class Rosbag2DataConverter:
       # invalid identifier
       else:
         print("ERROR: Invalid identifier used for: " + self.path2Str_(path + [key]))
+        
+    return entries
    
   def path2Str_(self, path):
     ret = ""
