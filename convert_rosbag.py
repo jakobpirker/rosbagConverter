@@ -135,7 +135,7 @@ class Rosbag2DataConverter:
     # storage structure for configuration and data
     self.data_ = {}    
     
-    # parse given structure
+    # creat data-type definition
     for topic in self.structure_:
       field_entries = self.getDictPaths_(self.structure_[topic], [], {})
       self.field_entries_[topic] = field_entries
@@ -148,45 +148,56 @@ class Rosbag2DataConverter:
         # no identifier entry for this topic yet
         if entry[YAML_IDENT] not in dt:
           dt[entry[YAML_IDENT]] = []
-
-        array_type = (self.bag_.get_message_count(topic), entry[YAML_LENGTH])
-        dt[entry[YAML_IDENT]].append((name, entry[YAML_DATATYPE], array_type))
+        
+        # nested array
+        if entry[YAML_LENGTH] > 1:
+          array_type = (entry[YAML_LENGTH], )
+          dt[entry[YAML_IDENT]].append((name, entry[YAML_DATATYPE], array_type))
+        else:
+          dt[entry[YAML_IDENT]].append((name, entry[YAML_DATATYPE]))
       
-      for ident in dt:
-        self.data_[topic][ident] = np.array([], dtype=dt[ident])
-    
-    print(yaml.dump(self.field_entries_))
+      if IDENT_CONFIG in dt:
+        self.data_[topic][IDENT_CONFIG] = np.zeros(1, dtype=dt[IDENT_CONFIG])
+        
+      if IDENT_DATA in dt:
+        self.data_[topic][IDENT_DATA] = np.zeros(self.bag_.get_message_count(topic), dtype=dt[IDENT_DATA])
     
     # save the data from bagfile to 2D array structure
     for topic in self.field_entries_:
+      
+      msg_count = 0
       for top, msg, t in self.bag_.read_messages(topics=[topic]):
+        
         for name in self.field_entries_[topic]:
           
           entry = self.field_entries_[topic][name]
-          data = self.data_[topic][entry[YAML_IDENT]]
+          data = self.data_[topic][entry[YAML_IDENT]][name]
           
           # get nested element according to data path in path dict
-          element = message_converter.convert_ros_message_to_dictionary(msg)
+          new_d = message_converter.convert_ros_message_to_dictionary(msg)
           for nest in entry[self.YAML_PATH]:
-            element = element[nest]
-            
-          print(element)
+            new_d = new_d[nest]
           
           # configuration datafield
           if entry[YAML_IDENT] == IDENT_CONFIG:
             # store once, and check if it stays the same
-            pass
+            if msg_count == 0:
+              # store
+              data[0] = new_d
+            else:
+              if data[0] != new_d:
+                print("ERROR: Configuration changed {0}/{1}: {2} to {3}".format(topic, str(name), str(data[msg_count]), str(new_d)))            
           
           elif entry[YAML_IDENT] == IDENT_DATA:
             # store for each iteration
-            pass
+            data[msg_count] = new_d
           
           else:
             # shouldn't happen...
             print("A wild ERROR appeared! for: " + self.path2Str_([topic] + entry[self.YAML_PATH]))
             print("(1) FIGHT, (2) PROG, (3) ITEM, (4) RUN")
-        # temp
-        break
+            
+        msg_count = msg_count + 1
         
     self.bag_.close()  
 
