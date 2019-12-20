@@ -133,27 +133,29 @@ class Rosbag2DataConverter:
     # for each topic:
     self.field_entries_ = {} # data entries
     # storage structure for configuration and data
-    self.dt_ = {IDENT_CONFIG:{}, IDENT_DATA:{}}
+    self.data_ = {}    
     
+    # parse given structure
     for topic in self.structure_:
-      field_entry = self.getDictPaths_(self.structure_[topic], [], {})
-      self.field_entries_[topic] = field_entry
+      field_entries = self.getDictPaths_(self.structure_[topic], [], {})
+      self.field_entries_[topic] = field_entries
+      self.data_[topic] = {}
+      dt = {} # datatypes for config/data 
       
-      # create storage structure definition
-      for name in field_entry:        
-        # point reference pointer to the right list -> operations are the same 
-        cur_dt = self.dt_[field_entry[name][YAML_IDENT]] 
-        # no according entry for this list yet          
-        if topic not in cur_dt:
-          cur_dt[topic] = []
-          
-        array_type = "({0}, {1})".format(self.bag_.get_message_count(topic), field_entry[name][YAML_LENGTH])
-        cur_dt[topic].append((name, field_entry[name][YAML_DATATYPE], array_type))
+      # create storage structure definition 
+      for name in field_entries:        
+        entry =  field_entries[name]
+        # no identifier entry for this topic yet
+        if entry[YAML_IDENT] not in dt:
+          dt[entry[YAML_IDENT]] = []
+
+        array_type = (self.bag_.get_message_count(topic), entry[YAML_LENGTH])
+        dt[entry[YAML_IDENT]].append((name, entry[YAML_DATATYPE], array_type))
+      
+      for ident in dt:
+        self.data_[topic][ident] = np.array([], dtype=dt[IDENT_CONFIG])
     
     print(yaml.dump(self.field_entries_))
-    print(yaml.dump(self.dt_))
-
-    # TODO: create storage structure
     
     # save the data from bagfile to 2D array structure
     for topic in self.field_entries_:
