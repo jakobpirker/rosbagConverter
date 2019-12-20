@@ -153,7 +153,7 @@ class Rosbag2DataConverter:
         dt[entry[YAML_IDENT]].append((name, entry[YAML_DATATYPE], array_type))
       
       for ident in dt:
-        self.data_[topic][ident] = np.array([], dtype=dt[IDENT_CONFIG])
+        self.data_[topic][ident] = np.array([], dtype=dt[ident])
     
     print(yaml.dump(self.field_entries_))
     
@@ -162,25 +162,28 @@ class Rosbag2DataConverter:
       for top, msg, t in self.bag_.read_messages(topics=[topic]):
         for name in self.field_entries_[topic]:
           
-          cur_field = self.field_entries_[topic][name]
+          entry = self.field_entries_[topic][name]
+          data = self.data_[topic][entry[YAML_IDENT]]
           
           # get nested element according to data path in path dict
           element = message_converter.convert_ros_message_to_dictionary(msg)
-          for nest in cur_field[self.YAML_PATH]:
+          for nest in entry[self.YAML_PATH]:
             element = element[nest]
+            
+          print(element)
           
           # configuration datafield
-          if cur_field[YAML_IDENT] == IDENT_CONFIG:
+          if entry[YAML_IDENT] == IDENT_CONFIG:
             # store once, and check if it stays the same
             pass
           
-          elif cur_field[YAML_IDENT] == IDENT_DATA:
+          elif entry[YAML_IDENT] == IDENT_DATA:
             # store for each iteration
             pass
           
           else:
             # shouldn't happen...
-            print("A wild ERROR appeared! for: " + self.path2Str_([topic] + cur_field[self.YAML_PATH]))
+            print("A wild ERROR appeared! for: " + self.path2Str_([topic] + entry[self.YAML_PATH]))
             print("(1) FIGHT, (2) PROG, (3) ITEM, (4) RUN")
         # temp
         break
