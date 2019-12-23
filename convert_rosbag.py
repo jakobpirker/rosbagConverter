@@ -3,6 +3,7 @@ import argparse
 import rosbag
 from rospy_message_converter import message_converter
 import numpy as np
+import pickle
 
 YAML_DESC = "data_description"
 YAML_DATATYPE = "datatype"
@@ -12,6 +13,8 @@ YAML_LENGTH = "length"
 YAML_IDENT = "identifier"
 IDENT_CONFIG = "c"
 IDENT_DATA = "d"
+
+# TODO: python datatypes to numpy datatypes conversion table?
 
 #----------------------------------------------------------------------------------
 class RosbagStructureParser:
@@ -116,7 +119,11 @@ class Rosbag2DataConverter:
 
   def __init__(self, bag_file, yaml_config):
     
-    self.YAML_PATH = 'path'    
+    self.YAML_PATH = 'path'
+    self.PICKLE_EXT_ = ".pickle"
+    
+    self.out_file_ = bag_file[:-4] + self.PICKLE_EXT_
+       
     self.bag_ = rosbag.Bag(bag_file)
     
     # parse config-yaml
@@ -199,7 +206,11 @@ class Rosbag2DataConverter:
             
         msg_count = msg_count + 1
         
-    self.bag_.close()  
+    self.bag_.close()
+    
+    with open(self.out_file_, 'wb') as f:
+      pickle.dump(self.data_, f, protocol=2)
+      print("Saved data to: " + self.out_file_)  
 
   # each topic contains a list of paths for the corresponding datafield
   # each list element contains a dictionary defining the field-properties
