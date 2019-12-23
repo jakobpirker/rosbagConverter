@@ -95,7 +95,7 @@ class RosbagStructureParser:
       
       # create description for each leaf according to its type 
       else:
-        new_content = {YAML_IDENT: None, YAML_ALIAS: str(key)}
+        new_content = {YAML_IDENT: IDENT_DATA, YAML_ALIAS: str(key)}
         
         # nested array
         if isinstance(dictionary[key], list):
@@ -104,7 +104,9 @@ class RosbagStructureParser:
             new_content[YAML_DATATYPE] = type(dictionary[key][0]).__name__
             new_content[YAML_LENGTH] = len(dictionary[key])
           else:
-            print("WARNING: Skipped empty list element: " + str(key))
+            new_content[YAML_DATATYPE] = None
+            new_content[YAML_LENGTH] = None
+            print("WARNING: Empty list element: " + str(key))
         else:
           new_content[YAML_DATATYPE] = type(dictionary[key]).__name__ 
           new_content[YAML_LENGTH] = 1
@@ -169,6 +171,8 @@ class Rosbag2DataConverter:
       if IDENT_DATA in dt:
         self.data_[topic][IDENT_DATA] = np.zeros(self.bag_.get_message_count(topic), dtype=dt[IDENT_DATA])
     
+    print("Successfully parsed configuration file. Reading bag-file...") 
+    
     # save the data from bagfile to 2D array structure
     for topic in self.field_entries_:
       
@@ -208,6 +212,8 @@ class Rosbag2DataConverter:
         
     self.bag_.close()
     
+    print("Successfully read-in the bag-file. Saving...")
+    
     with open(self.out_file_, 'wb') as f:
       pickle.dump(self.data_, f, protocol=2)
       print("Saved data to: " + self.out_file_)  
@@ -233,7 +239,7 @@ class Rosbag2DataConverter:
             new_dict[self.YAML_PATH] = path + [key]
             entries[name] = new_dict
           else:
-            print("ERROR: Multiple entries for datafield: " + str(dictionary[key][YAML_ALIAS]))
+            print("ERROR: Multiple entries for datafield: " + self.path2Str_(path) + str(dictionary[key][YAML_ALIAS]))
         else:
           self.getDictPaths_(dictionary[key], path + [key], entries)
       
