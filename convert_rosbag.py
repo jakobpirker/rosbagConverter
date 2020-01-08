@@ -96,7 +96,7 @@ class RosbagStructureParser:
       # create description for each leaf according to its type 
       else:
         new_content = {YAML_IDENT: IDENT_DATA, YAML_ALIAS: str(key)}
-        
+        # TODO: map string types  
         # nested array
         if isinstance(dictionary[key], list):
           # empty lists are skipped
@@ -157,7 +157,7 @@ class Rosbag2DataConverter:
         # no identifier entry for this topic yet
         if entry[YAML_IDENT] not in dt:
           dt[entry[YAML_IDENT]] = []
-        
+        # TODO: map string types 
         # nested array
         if entry[YAML_LENGTH] > 1:
           array_type = (entry[YAML_LENGTH], )
@@ -175,7 +175,7 @@ class Rosbag2DataConverter:
     
     # save the data from bagfile to 2D array structure
     for topic in self.field_entries_:
-      
+      print("Reading topic: " + str(topic))
       msg_count = 0
       for top, msg, t in self.bag_.read_messages(topics=[topic]):
         
@@ -195,9 +195,19 @@ class Rosbag2DataConverter:
             if msg_count == 0:
               # store
               data[0] = new_d
-            else:
+            # QUICKFIX! TODO: proper comparison in case of an array -> numpy thing
+            elif entry[YAML_LENGTH] == 1:
               if data[0] != new_d:
-                print("ERROR: Configuration changed {0}/{1}: {2} to {3}".format(topic, str(name), str(data[msg_count]), str(new_d)))            
+                print("ERROR: Configuration changed {0}/{1}: {2} to {3}".format(topic, str(name), str(data[0]), str(new_d)))
+                # data[0] = new_d
+            elif entry[YAML_LENGTH] > 1:
+              for i  in range(len(data)):
+                # TODO: fix?
+                if data[i] != new_d[i]:
+                  print("ERROR: Configuration changed {0}/{1}: {2} to {3}".format(topic, str(name), str(data[i]), str(new_d[i])))
+            else:
+              # shouldn't happen
+              print("Wrong configuration properties in: " + str(topic))
           
           elif entry[YAML_IDENT] == IDENT_DATA:
             # store for each iteration
